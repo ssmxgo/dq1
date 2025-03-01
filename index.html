@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ドラクエ風プロトタイプ (最終テスト版)</title>
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Font: Press Start 2P -->
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    body {
+      background-color: #000;
+      color: #fff;
+      font-family: 'Press Start 2P', cursive;
+      margin: 0;
+      padding: 10px;
+      overflow: hidden;
+    }
+    /* マップ表示領域（フィールド、町共通） */
+    .map-container {
+      width: 320px;
+      height: 320px;
+      margin: 0 auto;
+      border: 4px solid #fff;
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      position: relative;
+      outline: none;
+    }
+    .tile {
+      box-sizing: border-box;
+      border: 1px solid #444;
+      text-align: center;
+      line-height: 32px;
+      font-size: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    /* 地形用クラス */
+    .grass { background-color: #008000; }
+    .road { background-color: #a0a0a0; }
+    .forest { background-color: #006400; }
+    .mountain { background-color: #8b4513; }
+    .water { background-color: #1e90ff; }
+    /* 町用 */
+    .pavement { background-color: #696969; }
+    
+    /* 特殊タイル */
+    .townGate { background-color: #604020; }
+    .npc { background-color: #ffa0a0; }
+    .building { background-color: #333333; }
+    .exit { background-color: #222222; }
+    .hero { background-color: #ff0000; font-weight: bold; }
+    .message-window {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background-color: rgba(0,0,0,0.8);
+      padding: 4px;
+      font-size: 10px;
+      text-align: center;
+    }
+    /* フロートDpad：固定表示、70%透過 */
+    .control-panel {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      width: 120px;
+      height: 120px;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.7;
+    }
+    .control-row { display: flex; justify-content: center; }
+    .control-btn {
+      width: 50px;
+      height: 50px;
+      font-size: 20px;
+      margin: 2px;
+      line-height: 50px;
+      text-align: center;
+      user-select: none;
+    }
+    /* 戦闘シーンのレイアウト（Liquidデザイン） */
+    .battle-container {
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      border: 4px solid #fff;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      box-sizing: border-box;
+    }
+    .battle-top {
+      display: flex;
+      flex: 1;
+      box-sizing: border-box;
+    }
+    .battle-left, .battle-center, .battle-right {
+      padding: 8px;
+      box-sizing: border-box;
+    }
+    .battle-left, .battle-right {
+      width: 30%;
+      font-size: 12px;
+      overflow: auto;
+    }
+    .battle-center {
+      width: 40%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      border-left: 1px solid #fff;
+      border-right: 1px solid #fff;
+    }
+    /* 戦闘フッター：高さ拡大し5行表示可能 */
+    .battle-footer {
+      background-color: #222;
+      padding: 8px;
+      font-size: 14px;
+      height: 100px;
+      overflow-y: auto;
+      box-sizing: border-box;
+    }
+    .battle-footer .actions {
+      margin-top: 4px;
+      text-align: center;
+    }
+    .battle-footer button {
+      background-color: #444;
+      color: #fff;
+      border: none;
+      padding: 6px 8px;
+      margin: 0 4px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    /* 魔法選択ウィンドウ */
+    .spell-window {
+      position: absolute;
+      top: 20%;
+      left: 20%;
+      width: 60%;
+      height: 50%;
+      background-color: rgba(0,0,0,0.9);
+      border: 2px solid #fff;
+      padding: 8px;
+      overflow-y: auto;
+      font-size: 10px;
+      z-index: 10;
+    }
+    /* アイテム選択ウィンドウ（戦闘中） */
+    .item-window {
+      position: absolute;
+      top: 20%;
+      left: 20%;
+      width: 60%;
+      height: 50%;
+      background-color: rgba(0,0,0,0.9);
+      border: 2px solid #fff;
+      padding: 8px;
+      overflow-y: auto;
+      font-size: 10px;
+      z-index: 10;
+    }
+    /* ショップウィンドウ（町） */
+    .shop-window {
+      position: absolute;
+      top: 20%;
+      left: 15%;
+      width: 70%;
+      height: 60%;
+      background-color: rgba(0,0,0,0.95);
+      border: 2px solid #fff;
+      padding: 8px;
+      overflow-y: auto;
+      font-size: 10px;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <component :is="currentSceneComponent"
+             @switch-scene="switchScene"
+             @update-status="updateStatus"
+             @check-properties="checkProperties"
+             @update-field-position="updateFieldPosition"
+             :initial-hero-x="fieldPosition.x"
+             :initial-hero-y="fieldPosition.y"
+             :field-entrance="fieldEntrance"
+             :current-enemy="currentEnemy"
+             :hero-status="status">
+  </component>
+</div>
+
+<!-- Vue 3 CDN -->
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script>
+/******************************************
+ * IndexedDB 初期化 (プロトタイプ用)
+ ******************************************/
+function initDB() {
+  const req = indexedDB.open("GameDB", 1);
+  req.onupgradeneeded = function(e) {
+    const db = e.target.result;
+    if (!db.objectStoreNames.contains("maps")) {
+      db.createObjectStore("maps", { keyPath: "id" });
+    }
+  };
+  req.onsuccess = function(e) { console.log("IndexedDB 初期化完了"); };
+  req.onerror = function(e) { console.error("IndexedDB エラー", e); };
+}
+initDB();
+
+/******************************************
+ * キーボード操作用 Mix-in
+ ******************************************/
+const KeyOperationMixin = {
+  methods: {
+    handleKeyDown(e) {
+      switch(e.key) {
+        case 'ArrowUp':    this.move('up'); break;
+        case 'ArrowDown':  this.move('down'); break;
+        case 'ArrowLeft':  this.move('left'); break;
+        case 'ArrowRight': this.move('right'); break;
+        case 'p': case 'P': this.emitPropertyCheck(); break;
+        case 'z': case 'Z': if(this.physicalAttack) this.physicalAttack(); break;
+        case 'x': case 'X': if(this.openSpellMenu) this.openSpellMenu(); break;
+        case 'c': case 'C': if(this.runAway) this.runAway(); break;
+        case 'v': case 'V': if(this.openItemMenu) this.openItemMenu(); break;
+      }
+    }
+  },
+  mounted() {
+    window.addEventListener('keydown', this.handleKeyDown);
+  },
+  unmounted() {
+    window.removeEventListener('keydown', this.handleKeyDown);
+  }
+};
+
+/******************************************
+ * FieldMap コンポーネント (フィールド)
+ ******************************************/
+const FieldMap = {
+  mixins: [KeyOperationMixin],
+  props: ['initialHeroX','initialHeroY','heroStatus'],
+  template: `
+    <div>
+      <h2 class="text-center mb-2">フィールドマップ</h2>
+      <div class="map-container">
+        <div v-for="tile in mapData" :key="tile.x+'-'+tile.y"
+             :class="['tile', tile.type, (tile.x===heroX && tile.y===heroY)?'hero':'']">
+          {{ (tile.x===heroX && tile.y===heroY)?'勇者': tile.label }}
+        </div>
+        <div v-if="message" class="message-window">{{ message }}</div>
+      </div>
+      <div class="control-panel">
+        <div class="control-row">
+          <button @touchstart.prevent="move('up')" @mousedown.prevent="move('up')" class="control-btn bg-blue-500 rounded-full">↑</button>
+        </div>
+        <div class="control-row">
+          <button @touchstart.prevent="move('left')" @mousedown.prevent="move('left')" class="control-btn bg-blue-500 rounded-full">←</button>
+          <button @touchstart.prevent="move('right')" @mousedown.prevent="move('right')" class="control-btn bg-blue-500 rounded-full">→</button>
+        </div>
+        <div class="control-row">
+          <button @touchstart.prevent="move('down')" @mousedown.prevent="move('down')" class="control-btn bg-blue-500 rounded-full">↓</button>
+        </div>
+        <div class="control-row">
+          <button @touchstart.prevent="emitPropertyCheck" @mousedown.prevent="emitPropertyCheck" class="control-btn bg-purple-500 rounded-full">Ｐ</button>
+        </div>
+      </div>
+    </div>
+  `,
+  data() {
+    return {
+      heroX: this.initialHeroX || 0,
+      heroY: this.initialHeroY || 0,
+      message: "",
+      mapData: [],
+      isFrozen: false
+    }
+  },
+  methods: {
+    initializeMap() {
+      this.mapData = [];
+      for (let y = 0; y < 10; y++){
+        for (let x = 0; x < 10; x++){
+          let tile = { x, y, type:"grass", label:"" };
+          if(x === 0 && y === 9){
+            tile.type = "townGate"; tile.label = "町";
+          } else if(x === 5 && y === 5){
+            tile.type = "npc"; tile.label = "NPC";
+          } else {
+            // フィールドの場合、通常はランダムに地形を割り当てる
+            const terrains = ["grass", "road", "forest", "mountain", "water"];
+            const r = Math.random();
+            if(r < 0.6) tile.type = "grass";
+            else if(r < 0.8) tile.type = "road";
+            else if(r < 0.9) tile.type = "forest";
+            else if(r < 0.95) tile.type = "mountain";
+            else tile.type = "water";
+          }
+          this.mapData.push(tile);
+        }
+      }
+    },
+    getTileAt(x, y) {
+      return this.mapData.find(t => t.x === x && t.y === y);
+    },
+    showMessage(msg) {
+      this.message = msg;
+      setTimeout(() => { this.message = ""; }, 2500);
+    },
+    move(dir) {
+      if(this.isFrozen) return;
+      let nx = this.heroX, ny = this.heroY;
+      if(dir==='up' && ny > 0) ny--;
+      if(dir==='down' && ny < 9) ny++;
+      if(dir==='left' && nx > 0) nx--;
+      if(dir==='right' && nx < 9) nx++;
+      let tile = this.getTileAt(nx, ny);
+      // 移動不可地形: water, mountain
+      if(tile && (tile.type === "water" || tile.type === "mountain")){
+        this.showMessage("そこは通れない！");
+        return;
+      }
+      if(tile && tile.type === "townGate"){
+        this.heroX = nx; this.heroY = ny;
+        this.$emit('update-field-position', { x: nx, y: ny });
+        this.$emit('switch-scene', "town", { x: nx, y: ny });
+        return;
+      }
+      this.heroX = nx; this.heroY = ny;
+      this.$emit('update-field-position', { x: nx, y: ny });
+      if(tile && tile.type === "grass" && Math.random() < 0.1){
+        this.isFrozen = true;
+        let enemy = this.generateEnemy();
+        this.showMessage(enemy.name + "があらわれた！");
+        setTimeout(() => {
+          this.$emit('switch-scene', "battle", { x: nx, y: ny, enemy });
+        }, 800);
+        return;
+      }
+      if(tile && tile.type === "npc"){
+        this.showMessage("「こんにちは、旅の人！」");
+      }
+    },
+    generateEnemy() {
+      const baseEnemies = [
+        { name:"スライム", hp:10, maxHp:10, attack:2, defense:1, magicAttack:0, magicDefense:0, speed:5, canUseMagic:false,
+          reward:{ gold:30, exp:10, item:null } },
+        { name:"ドラキー", hp:15, maxHp:15, attack:3, defense:2, magicAttack:0, magicDefense:1, speed:6, canUseMagic:false,
+          reward:{ gold:50, exp:15, item:null } },
+        { name:"キメラ", hp:20, maxHp:20, attack:5, defense:2, magicAttack:4, magicDefense:2, speed:7, canUseMagic:true,
+          reward:{ gold:80, exp:20, item:"羽" } }
+      ];
+      const e = JSON.parse(JSON.stringify(baseEnemies[Math.floor(Math.random()*baseEnemies.length)]));
+      e.speed += (Math.floor(Math.random()*3)-1);
+      return e;
+    },
+    emitPropertyCheck() {
+      this.$emit("check-properties");
+    }
+  },
+  mounted() {
+    this.initializeMap();
+  }
+};
+
+/******************************************
+ * TownMap コンポーネント (町)
+ ******************************************/
+const TownMap = {
+  mixins: [KeyOperationMixin],
+  props: ['fieldEntrance','heroStatus'],
+  template: `
+    <div>
+      <h2 class="text-center mb-2">町</h2>
+      <div class="map-container">
+        <div v-for="tile in townData" :key="tile.x+'-'+tile.y"
+             :class="['tile', tile.type, (tile.x===heroX && tile.y===heroY) ? 'hero' : '']">
+          {{ (tile.x===heroX && tile.y===heroY) ? '勇者' : tile.label }}
+        </div>
+        <div v-if="message" class="message-window">{{ message }}</div>
+        <div v-if="shopOpen" class="shop-window">
+          <h3 class="mb-2">{{ currentShopName }}</h3>
+          <div v-for="(item, idx) in shopItems" :key="idx"
+               class="border border-white p-1 mb-1 cursor-pointer"
+               @touchstart.prevent="buyItem(item)" @mousedown.prevent="buyItem(item)">
+            {{ item.name }} ({{ item.price }}G)
+          </div>
+          <button @touchstart.prevent="closeShop" @mousedown.prevent="closeShop" class="bg-red-500 hover:bg-red-700 px-2 py-1 rounded">閉じる</button>
+        </div>
+      </div>
+      <div class="control-panel">
+        <div class="control-row">
+          <button @touchstart.prevent="move('up')" @mousedown.prevent="move('up')" class="control-btn bg-blue-500 rounded-full">↑</button>
+        </div>
+        <div class="control-row">
+          <button @touchstart.prevent="move('left')" @mousedown.prevent="move('left')" class="control-btn bg-blue-500 rounded-full">←</button>
+          <button @touchstart.prevent="move('right')" @mousedown.prevent="move('right')" class="control-btn bg-blue-500 rounded-full">→</button>
+        </div>
+        <div class="control-row">
+          <button @touchstart.prevent="move('down')" @mousedown.prevent="move('down')" class="control-btn bg-blue-500 rounded-full">↓</button>
+        </div>
+        <div class="control-row">
+          <button @touchstart.prevent="emitPropertyCheck" @mousedown.prevent="emitPropertyCheck" class="control-btn bg-purple-500 rounded-full">Ｐ</button>
+        </div>
+      </div>
+    </div>
+  `,
+  data(){
+    return {
+      heroX: 1,
+      heroY: 1,
+      message: "",
+      townData: [],
+      shopOpen: false,
+      currentShopName: "",
+      shopItems: []
+    }
+  },
+  methods:{
+    initTown(){
+      this.townData = [];
+      for(let y=0; y<10; y++){
+        for(let x=0; x<10; x++){
+          let tile = { x, y, type:"pavement", label:"" };
+          if(y===0 || y===9 || x===0 || x===9){
+            tile.type = "exit";
+          }
+          if(x===3 && y===3){ tile.type="building"; tile.label="宿屋"; }
+          if(x===5 && y===3){ tile.type="building"; tile.label="武器屋"; }
+          if(x===7 && y===3){ tile.type="building"; tile.label="防具屋"; }
+          if(x===5 && y===5){ tile.type="npc"; tile.label="NPC"; }
+          if(x===7 && y===5){ tile.type="building"; tile.label="道具屋"; }
+          this.townData.push(tile);
+        }
+      }
+    },
+    getTileAt(x,y){
+      return this.townData.find(t => t.x === x && t.y === y);
+    },
+    showMessage(msg){
+      this.message = msg;
+      setTimeout(()=> { this.message = ""; }, 2000);
+    },
+    move(dir){
+      let nx = this.heroX, ny = this.heroY;
+      if(dir==='up') ny--;
+      if(dir==='down') ny++;
+      if(dir==='left') nx--;
+      if(dir==='right') nx++;
+      if(nx < 0 || nx > 9 || ny < 0 || ny > 9){
+        this.$emit('switch-scene','field', this.fieldEntrance);
+        return;
+      }
+      let tile = this.getTileAt(nx, ny);
+      if(tile.type==='building'){
+        this.showMessage(tile.label + 'に入る');
+        this.openShop(tile.label);
+        return;
+      }
+      this.heroX = nx; this.heroY = ny;
+      if(tile.type==='npc'){
+        this.showMessage("「こんにちは、旅の人！」");
+      }
+    },
+    onTileTouch(tile){
+      if(tile.type==='npc'){
+        this.showMessage("「こんにちは、旅の人！」");
+      } else if(tile.type==='building'){
+        this.showMessage(tile.label + 'に入る');
+        this.openShop(tile.label);
+      }
+    },
+    openShop(lbl){
+      this.shopOpen = true;
+      if(lbl==='宿屋'){
+        this.currentShopName = "宿屋 (20G)";
+        this.shopItems = [{ name:"宿泊", price:20, effect:"heal", type:"consumable" }];
+      } else if(lbl==='武器屋'){
+        this.currentShopName = "武器屋";
+        this.shopItems = [
+          { name:"こんぼう", price:50, type:"weapon", power:2 },
+          { name:"どうのつるぎ", price:180, type:"weapon", power:8 },
+          { name:"はがねのつるぎ", price:1500, type:"weapon", power:20 }
+        ];
+      } else if(lbl==='防具屋'){
+        this.currentShopName = "防具屋";
+        this.shopItems = [
+          { name:"ぬののふく", price:20, type:"armor", power:2 },
+          { name:"かわのよろい", price:70, type:"armor", power:4 },
+          { name:"くさりかたびら", price:300, type:"armor", power:10 }
+        ];
+      } else if(lbl==='道具屋'){
+        this.currentShopName = "道具屋";
+        this.shopItems = [
+          { name:"回復薬", price:10, type:"consumable", effect:"smallHeal" },
+          { name:"毒消し草", price:8, type:"consumable", effect:"curePoison" },
+          { name:"キメラのつばさ", price:25, type:"consumable", effect:"returnTown" }
+        ];
+      }
+    },
+    closeShop(){
+      this.shopOpen = false;
+    },
+    buyItem(item){
+      this.$emit('update-status', { type:"buy", item });
+      this.showMessage(item.name + "を購入しました。");
+      this.closeShop();
+    },
+    emitPropertyCheck(){
+      this.$emit("check-properties");
+    }
+  },
+  mounted(){
+    this.initTown();
+  }
+};
+
+/******************************************
+ * BattleScene コンポーネント (戦闘)
+ ******************************************/
+const BattleScene = {
+  mixins: [KeyOperationMixin],
+  props: ['initialHeroHP','enemy','heroStatus','calcFinalAttack','calcFinalDefense'],
+  template: `
+    <div class="battle-container">
+      <div class="battle-top">
+        <div class="battle-left">
+          <h3>勇者</h3>
+          <p>HP: {{ heroHP }} / {{ heroMaxHP }}</p>
+          <p>MP: {{ heroStatus.mp }} / {{ heroStatus.maxMp }}</p>
+          <p>攻: {{ calcFinalAttack(heroStatus) }}</p>
+          <p>守: {{ calcFinalDefense(heroStatus) }}</p>
+          <p>速: {{ heroStatus.speed }}</p>
+          <p>LV: {{ heroStatus.level }}</p>
+          <p>EXP: {{ heroStatus.exp }}</p>
+        </div>
+        <div class="battle-center">
+          <div style="width:120px; height:120px; background-color:#444; display:flex; align-items:center; justify-content:center;">
+            <span style="font-size:18px;">{{ enemy.name }}</span>
+          </div>
+        </div>
+        <div class="battle-right">
+          <h3>敵</h3>
+          <p>HP: {{ enemyHP }} / {{ enemyMaxHP }}</p>
+          <p>攻: {{ enemy.attack }}</p>
+          <p>守: {{ enemy.defense }}</p>
+          <p>魔攻: {{ enemy.magicAttack }}</p>
+          <p>魔防: {{ enemy.magicDefense }}</p>
+          <p>速: {{ enemy.speed }}</p>
+        </div>
+      </div>
+      <div class="battle-footer">
+        <div style="height:50px; overflow-y: auto; width:100%;">
+          <p v-for="(line, index) in battleMessageLines" :key="index">{{ line }}</p>
+        </div>
+        <div class="actions">
+          <button @touchstart.prevent="physicalAttack" @mousedown.prevent="physicalAttack" class="bg-blue-500 rounded">攻撃</button>
+          <button v-if="heroSpells.length>0" @touchstart.prevent="openSpellMenu" @mousedown.prevent="openSpellMenu" class="bg-indigo-500 rounded">魔法</button>
+          <button @touchstart.prevent="runAway" @mousedown.prevent="runAway" class="bg-yellow-500 rounded">逃げる</button>
+          <button @touchstart.prevent="openItemMenu" @mousedown.prevent="openItemMenu" class="bg-green-500 rounded">道具</button>
+        </div>
+      </div>
+      <div v-if="spellMenuOpen" class="spell-window">
+        <h3 class="mb-2">呪文選択 (MP: {{ heroStatus.mp }})</h3>
+        <div v-for="sp in heroSpells" :key="sp.name"
+             class="border border-white p-1 mb-1 cursor-pointer"
+             @touchstart.prevent="castSpell(sp)" @mousedown.prevent="castSpell(sp)">
+          {{ sp.name }} (MP: {{ sp.mpCost }})
+        </div>
+        <button @touchstart.prevent="spellMenuOpen = false" @mousedown.prevent="spellMenuOpen = false" class="bg-red-500 rounded px-2 py-1">やめる</button>
+      </div>
+      <div v-if="itemMenuOpen" class="item-window">
+        <h3 class="mb-2">アイテム選択</h3>
+        <div v-for="(it, idx) in heroStatus.inventory" :key="idx"
+             class="border border-white p-1 mb-1 cursor-pointer"
+             @touchstart.prevent="useItem(it)" @mousedown.prevent="useItem(it)">
+          {{ it.name }} (効果: {{ it.effect }})
+        </div>
+        <button @touchstart.prevent="itemMenuOpen = false" @mousedown.prevent="itemMenuOpen = false" class="bg-red-500 rounded px-2 py-1">やめる</button>
+      </div>
+    </div>
+  `,
+  data(){
+    return {
+      heroHP: this.initialHeroHP,
+      heroMaxHP: this.initialHeroHP,
+      enemyHP: this.enemy.hp,
+      enemyMaxHP: this.enemy.maxHp,
+      battleMessage: "戦闘開始！",
+      spellMenuOpen: false,
+      itemMenuOpen: false,
+      messageHistory: []
+    }
+  },
+  computed:{
+    battleMessageLines(){
+      return this.messageHistory.slice(-5);
+    },
+    heroSpells(){
+      const spells = [];
+      if(this.heroStatus.learnedSpells.includes("ギラ")){
+        spells.push({ name:"ギラ", mpCost:3, type:"attack", power:7 });
+      }
+      if(this.heroStatus.learnedSpells.includes("ベギラマ")){
+        spells.push({ name:"ベギラマ", mpCost:5, type:"attack", power:15 });
+      }
+      if(this.heroStatus.learnedSpells.includes("ホイミ")){
+        spells.push({ name:"ホイミ", mpCost:3, type:"heal", power:12 });
+      }
+      return spells;
+    }
+  },
+  methods:{
+    handleKeyDown(e){
+      switch(e.key){
+        case 'z': case 'Z': this.physicalAttack(); break;
+        case 'x': case 'X': if(this.heroSpells.length>0) this.openSpellMenu(); break;
+        case 'c': case 'C': this.runAway(); break;
+        case 'v': case 'V': this.openItemMenu(); break;
+      }
+    },
+    physicalAttack(){
+      let dmg = Math.max(0, this.calcFinalAttack(this.heroStatus) - this.enemy.defense);
+      this.enemyHP -= dmg;
+      this.appendBattleMessage(`勇者の攻撃！ ${this.enemy.name}に${dmg}ダメージ。`);
+      this.checkEnemyStatus();
+    },
+    openSpellMenu(){
+      this.spellMenuOpen = true;
+    },
+    castSpell(sp){
+      if(this.heroStatus.mp < sp.mpCost){
+        this.appendBattleMessage("MPが足りない！");
+        this.spellMenuOpen = false;
+        return;
+      }
+      this.heroStatus.mp -= sp.mpCost;
+      this.spellMenuOpen = false;
+      if(sp.type === "attack"){
+        let dmg = Math.max(0, sp.power - this.enemy.magicDefense);
+        this.enemyHP -= dmg;
+        this.appendBattleMessage(`${sp.name}！ ${this.enemy.name}に${dmg}ダメージ。`);
+      } else if(sp.type === "heal"){
+        let recov = sp.power;
+        this.heroHP = Math.min(this.heroHP + recov, this.heroMaxHP);
+        this.appendBattleMessage(`${sp.name}！ HPが${recov}回復。`);
+      }
+      this.checkEnemyStatus();
+    },
+    runAway(){
+      if(Math.random() < 0.5){
+        this.appendBattleMessage("逃走に成功した！");
+        setTimeout(()=>{ this.$emit('switch-scene','field'); }, 1500);
+      } else {
+        this.appendBattleMessage("逃走に失敗した！");
+        setTimeout(()=>{ this.enemyTurn(); }, 1000);
+      }
+    },
+    openItemMenu(){
+      this.itemMenuOpen = true;
+    },
+    useItem(item){
+      if(item.effect === "smallHeal"){
+        this.heroHP = Math.min(this.heroHP + 10, this.heroMaxHP);
+        this.appendBattleMessage("回復薬でHPが10回復！");
+      } else if(item.effect === "curePoison"){
+        this.appendBattleMessage("毒が治った！");
+      } else if(item.effect === "returnTown"){
+        this.appendBattleMessage("町に帰還！");
+        setTimeout(()=>{ this.$emit('switch-scene','town'); }, 1500);
+        return;
+      }
+      const idx = this.heroStatus.inventory.findIndex(it => it.name === item.name);
+      if(idx>=0) this.heroStatus.inventory.splice(idx,1);
+      this.itemMenuOpen = false;
+      setTimeout(()=>{ this.enemyTurn(); }, 1000);
+    },
+    checkEnemyStatus(){
+      if(this.enemyHP <= 0){
+        this.enemyHP = 0;
+        this.appendBattleMessage(`${this.enemy.name}を倒した！`);
+        setTimeout(()=>{
+          this.$emit('update-status',{ type:'reward', reward: this.enemy.reward });
+          this.$emit('switch-scene','field');
+        },1500);
+      } else {
+        setTimeout(()=>{ this.enemyTurn(); }, 1000);
+      }
+    },
+    enemyTurn(){
+      let dmg = 0;
+      if(this.enemy.canUseMagic && Math.random() < 0.5){
+        dmg = Math.max(0, this.enemy.magicAttack - 0);
+        this.appendBattleMessage(`${this.enemy.name}の魔法攻撃！ 勇者に${dmg}ダメージ。`);
+      } else {
+        dmg = Math.max(0, this.enemy.attack - (this.calcFinalDefense(this.heroStatus)/2));
+        this.appendBattleMessage(`${this.enemy.name}の攻撃！ 勇者に${dmg}ダメージ。`);
+      }
+      this.heroHP -= dmg;
+      this.heroStatus.hp = this.heroHP;
+      if(this.heroHP <= 0){
+        this.heroHP = 0;
+        this.appendBattleMessage("勇者は倒れた……");
+        setTimeout(()=>{
+          alert("GAME OVER");
+          this.$emit('update-status',{ type:'setHP', amount: this.heroMaxHP });
+          this.$emit('switch-scene','field');
+        },1500);
+      }
+    },
+    appendBattleMessage(line){
+      this.messageHistory.push(line);
+    }
+  },
+  computed: {
+    heroSpells(){
+      const spells = [];
+      if(this.heroStatus.learnedSpells.includes("ギラ")){
+        spells.push({ name:"ギラ", mpCost:3, type:"attack", power:7 });
+      }
+      if(this.heroStatus.learnedSpells.includes("ベギラマ")){
+        spells.push({ name:"ベギラマ", mpCost:5, type:"attack", power:15 });
+      }
+      if(this.heroStatus.learnedSpells.includes("ホイミ")){
+        spells.push({ name:"ホイミ", mpCost:3, type:"heal", power:12 });
+      }
+      return spells;
+    }
+  },
+  mounted(){
+    window.addEventListener('keydown', this.handleKeyDown);
+  },
+  unmounted(){
+    window.removeEventListener('keydown', this.handleKeyDown);
+  }
+};
+
+/******************************************
+ * ルート App コンポーネント
+ ******************************************/
+const App = {
+  data(){
+    return {
+      currentScene: "field", // "field", "town", "battle"
+      fieldEntrance: { x: 0, y: 9 },
+      fieldPosition: { x: 0, y: 9 },
+      status: {
+        level: 1, exp: 0, nextExp: 10,
+        hp: 15, maxHp: 15,
+        mp: 5, maxMp: 5,
+        attack: 5, defense: 3, speed: 10,
+        gold: 1000,
+        weapon: null, armor: null,
+        learnedSpells: ["ギラ", "ホイミ"],
+        inventory: []
+      },
+      currentEnemy: null
+    };
+  },
+  computed:{
+    currentSceneComponent(){
+      if(this.currentScene==="field"){
+        return FieldMap;
+      } else if(this.currentScene==="town"){
+        return TownMap;
+      } else if(this.currentScene==="battle"){
+        return {
+          render: () => {
+            return Vue.h(BattleScene, {
+              initialHeroHP: this.status.hp,
+              enemy: this.currentEnemy,
+              heroStatus: this.status,
+              calcFinalAttack: this.calcFinalAttack,
+              calcFinalDefense: this.calcFinalDefense
+            });
+          }
+        };
+      }
+    }
+  },
+  methods:{
+    switchScene(scene, payload){
+      if(scene==="field"){
+        // 戦闘後、フィールド座標は更新しない
+      } else if(scene==="town"){
+        if(payload && payload.x != null && payload.y != null){
+          this.fieldPosition.x = payload.x;
+          this.fieldPosition.y = payload.y;
+        }
+      } else if(scene==="battle"){
+        if(payload && payload.enemy){
+          this.currentEnemy = payload.enemy;
+        }
+      }
+      this.currentScene = scene;
+    },
+    updateStatus(payload){
+      if(payload.type==="buy"){
+        const it = payload.item;
+        if(this.status.gold >= it.price){
+          this.status.gold -= it.price;
+          if(it.type==="consumable"){
+            if(it.effect==="heal"){
+              this.status.hp = this.status.maxHp;
+              this.status.mp = this.status.maxMp;
+              alert(`宿泊し全回復。（残金:${this.status.gold}G）`);
+            } else {
+              alert(`${it.name}を購入。（残金:${this.status.gold}G）`);
+            }
+            this.status.inventory.push(it);
+          } else if(it.type==="weapon"){
+            this.status.weapon = it;
+            alert(`${it.name}を装備。（攻撃+${it.power}）（残金:${this.status.gold}G）`);
+          } else if(it.type==="armor"){
+            this.status.armor = it;
+            alert(`${it.name}を装備。（守備+${it.power}）（残金:${this.status.gold}G）`);
+          }
+        } else {
+          alert("お金が足りません！");
+        }
+      } else if(payload.type==="reward"){
+        const r = payload.reward;
+        this.status.gold += (r.gold || 0);
+        this.status.exp  += (r.exp || 0);
+        let msg = `敵を倒した！ ${r.gold}G, ${r.exp}EXP 獲得。`;
+        if(r.item){
+          msg += ` アイテム「${r.item}」入手！`;
+          this.status.inventory.push({ name: r.item, type:"consumable", effect:"unknown" });
+        }
+        alert(msg);
+        this.checkLevelUp();
+      } else if(payload.type==="setHP"){
+        this.status.hp = payload.amount;
+      }
+    },
+    checkLevelUp(){
+      const table = [10,30,60,100,200];
+      while(this.status.level < table.length+1 && this.status.exp >= table[this.status.level-1]){
+        this.status.level++;
+        this.gainLevelUpParams();
+        alert(`レベルが${this.status.level}になった！`);
+      }
+    },
+    gainLevelUpParams(){
+      this.status.maxHp += 5;
+      this.status.hp = this.status.maxHp;
+      this.status.maxMp += 3;
+      this.status.mp = this.status.maxMp;
+      this.status.attack += 2;
+      this.status.defense += 1;
+      if(this.status.level === 2 && !this.status.learnedSpells.includes("ホイミ")){
+        this.status.learnedSpells.push("ホイミ");
+        alert("ホイミを覚えた！");
+      } else if(this.status.level === 3 && !this.status.learnedSpells.includes("ベギラマ")){
+        this.status.learnedSpells.push("ベギラマ");
+        alert("ベギラマを覚えた！");
+      }
+    },
+    calcFinalAttack(hero){
+      const wAtk = hero.weapon ? hero.weapon.power : 0;
+      return hero.attack + wAtk;
+    },
+    calcFinalDefense(hero){
+      const aDef = hero.armor ? hero.armor.power : 0;
+      return hero.defense + aDef;
+    },
+    checkProperties(){
+      const w = this.status.weapon ? this.status.weapon.name : "(なし)";
+      const a = this.status.armor ? this.status.armor.name : "(なし)";
+      const inv = this.status.inventory.length > 0 ? this.status.inventory.map(i => i.name).join(", ") : "(なし)";
+      const msg = `【勇者のステータス】
+LV: ${this.status.level}
+EXP: ${this.status.exp} (次: ${this.status.nextExp||"?"})
+HP: ${this.status.hp}/${this.status.maxHp}
+MP: ${this.status.mp}/${this.status.maxMp}
+攻撃: ${this.calcFinalAttack(this.status)} (Base:${this.status.attack}, 武器:${w})
+守備: ${this.calcFinalDefense(this.status)} (Base:${this.status.defense}, 防具:${a})
+速度: ${this.status.speed}
+所持金: ${this.status.gold}G
+習得呪文: ${this.status.learnedSpells.join(", ") || "なし"}
+在庫: ${inv}`;
+      alert(msg);
+    },
+    updateFieldPosition(pos) {
+      this.fieldPosition.x = pos.x;
+      this.fieldPosition.y = pos.y;
+    }
+  }
+};
+
+Vue.createApp(App).mount('#app');
+</script>
+</body>
+</html>
