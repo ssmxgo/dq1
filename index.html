@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DQ1風プロトタイプ (修正版: 独自モーダル・攻撃ボタンアクティブ・町レイアウト修正)</title>
+  <title>DQ1風プロトタイプ (修正版: レベルアップ通知・スペースキーでプロパティ表示)</title>
   <!-- Tailwind CSS (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Font: Press Start 2P -->
@@ -46,10 +46,11 @@
     .water { background-color: #1e90ff; }
     /* 町用 */
     .pavement { background-color: #696969; }
+    .building { background-color: #333333; }
+    .shop { background-color: #5a5a5a; }
     /* 特殊タイル */
     .townGate { background-color: #604020; }
     .npc { background-color: #ffa0a0; }
-    .building { background-color: #333333; }
     .exit { background-color: #222222; }
     .hero { background-color: #ff0000; font-weight: bold; }
     .message-window {
@@ -86,7 +87,7 @@
       text-align: center;
       user-select: none;
     }
-    /* 戦闘シーン（Liquidデザイン） */
+    /* 戦闘シーン */
     .battle-container {
       width: 100%;
       max-width: 800px;
@@ -120,13 +121,12 @@
       border-left: 1px solid #fff;
       border-right: 1px solid #fff;
     }
-    /* 戦闘フッター：上下分割（メッセージエリアと操作エリア） */
+    /* 戦闘フッター */
     .battle-footer {
       background-color: #222;
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
-      /* 高さはデバイス縦幅に合わせ可変、最低60px（約3行分） */
       height: 20vh;
       min-height: 60px;
       padding: 8px;
@@ -179,7 +179,7 @@
       font-size: 10px;
       z-index: 10;
     }
-    /* モーダル (パラメータ表示や敵を倒した後のメッセージで利用) */
+    /* 統一モーダル */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -201,7 +201,7 @@
       max-height: 90%;
       overflow-y: auto;
     }
-    .modal-close {
+    .modal-ok {
       margin-top: 10px;
       padding: 5px 10px;
     }
@@ -234,7 +234,7 @@
     initDB();
 
     /******************************************
-     * キーボード操作用 Mix-in (1度だけ定義)
+     * キーボード操作用 Mix-in
      ******************************************/
     const KeyOperationMixin = {
       methods: {
@@ -353,8 +353,6 @@
           console.log("FieldMap init: mapData.length=", this.mapData.length);
         },
         tileIndex(vrow,vcol){
-          // vrow, vcol は 0-9
-          // offsetY + vrow => wy, offsetX + vcol => wx
           let wy= this.offsetY + vrow;
           let wx= this.offsetX + vcol;
           return wy* this.worldWidth + wx;
@@ -390,8 +388,7 @@
           if(dir==="right"&& nx<this.worldWidth-1) nx++;
           const idx= ny*this.worldWidth + nx;
           const tile= this.mapData[idx];
-          if(!tile) return; // 念のためガード
-
+          if(!tile) return;
           if(tile.type==="mountain"|| tile.type==="water"){
             this.showMessage("そこは通れない！");
             return;
@@ -425,7 +422,7 @@
               reward:{ gold:80, exp:20, item:"羽" }}
           ];
           const e= JSON.parse(JSON.stringify(baseEnemies[Math.floor(Math.random()*baseEnemies.length)]));
-          e.speed +=(Math.floor(Math.random()*3)-1);
+          e.speed += (Math.floor(Math.random()*3)-1);
           return e;
         },
         emitPropertyCheck(){
@@ -438,19 +435,20 @@
     };
 
     /******************************************
-     * TownMap (10×10) - レイアウト修正 (row/col)
+     * TownMap (スクロール可能な町マップ: world 20×20, viewport 10×10)
      ******************************************/
     const TownMap = {
       mixins:[KeyOperationMixin],
       props:["fieldEntrance","heroStatus"],
       template:`
         <div>
-          <h2 class="text-center mb-2">町 (10×10)</h2>
+          <h2 class="text-center mb-2">町マップ (20×20)</h2>
           <div class="map-container">
-            <div v-for="rowIndex in 10" :key="rowIndex" style="display:flex;">
-              <div v-for="colIndex in 10" :key="colIndex"
-                   :class="['tile', tileType(rowIndex-1,colIndex-1), isHeroTile(rowIndex-1,colIndex-1)?'hero':'']">
-                {{ isHeroTile(rowIndex-1,colIndex-1)? '勇者': tileLabel(rowIndex-1,colIndex-1) }}
+            <div v-for="rowIndex in viewportHeight" :key="rowIndex" style="display:flex;">
+              <div v-for="colIndex in viewportWidth" :key="colIndex"
+                   :class="['tile', tileType(rowIndex-1, colIndex-1), isHeroTile(rowIndex-1, colIndex-1)?'hero':'']"
+                   @touchstart.prevent="onTileTouch(tileAt(rowIndex-1, colIndex-1))" @mousedown.prevent="onTileTouch(tileAt(rowIndex-1, colIndex-1))">
+                {{ isHeroTile(rowIndex-1, colIndex-1)? '勇者': tileLabel(rowIndex-1, colIndex-1) }}
               </div>
             </div>
             <div v-if="message" class="message-window">{{ message }}</div>
@@ -462,9 +460,10 @@
                 {{ item.name }} ({{ item.price }}G)
               </div>
               <button @touchstart.prevent="closeShop" @mousedown.prevent="closeShop"
-                      class="bg-red-500 hover:bg-red-700 px-2 py-1 rounded">閉じる</button>
+                      class="bg-red-500 hover:bg-red-700 px-2 py-1 rounded">OK</button>
             </div>
           </div>
+          <!-- Dpad -->
           <div class="control-panel">
             <div class="control-row">
               <button @touchstart.prevent="move('up')" @mousedown.prevent="move('up')" class="control-btn bg-blue-500 rounded-full">↑</button>
@@ -484,104 +483,138 @@
       `,
       data(){
         return {
-          heroX:1,
-          heroY:1,
+          worldWidth: 20,
+          worldHeight: 20,
+          viewportWidth: 10,
+          viewportHeight: 10,
+          heroX: 5,
+          heroY: 5,
           message:"",
-          townData:[],
+          townData: [],
           shopOpen:false,
           currentShopName:"",
           shopItems:[]
         }
       },
+      computed:{
+        offsetX(){
+          let ox = this.heroX - Math.floor(this.viewportWidth/2);
+          if(ox < 0) ox = 0;
+          if(ox > this.worldWidth - this.viewportWidth) ox = this.worldWidth - this.viewportWidth;
+          return ox;
+        },
+        offsetY(){
+          let oy = this.heroY - Math.floor(this.viewportHeight/2);
+          if(oy < 0) oy = 0;
+          if(oy > this.worldHeight - this.viewportHeight) oy = this.worldHeight - this.viewportHeight;
+          return oy;
+        }
+      },
       methods:{
         initTown(){
-          this.townData=[];
-          for(let y=0; y<10; y++){
-            for(let x=0; x<10; x++){
-              let tile={x,y,type:"pavement",label:""};
-              if(y===0||y===9||x===0||x===9) tile.type="exit";
+          this.townData = [];
+          for(let y=0; y<this.worldHeight; y++){
+            for(let x=0; x<this.worldWidth; x++){
+              let tile = { x, y, type:"pavement", label:"" };
+              if(y===0 || y===this.worldHeight-1 || x===0 || x===this.worldWidth-1){
+                tile.type = "exit";
+              }
+              // 建物やNPCの配置
               if(x===3 && y===3){ tile.type="building"; tile.label="宿屋"; }
               if(x===5 && y===3){ tile.type="building"; tile.label="武器屋"; }
               if(x===7 && y===3){ tile.type="building"; tile.label="防具屋"; }
+              if(x===3 && y===7){ tile.type="building"; tile.label="道具屋"; }
               if(x===5 && y===5){ tile.type="npc"; tile.label="NPC"; }
-              if(x===7 && y===5){ tile.type="building"; tile.label="道具屋"; }
               this.townData.push(tile);
             }
           }
         },
-        tileAt(y,x){
-          return this.townData.find(t=>t.x===x && t.y===y);
+        tileIndex(vrow,vcol){
+          let wy = this.offsetY + vrow;
+          let wx = this.offsetX + vcol;
+          return wy * this.worldWidth + wx;
         },
-        tileType(y,x){
-          const tile= this.tileAt(y,x);
-          return tile? tile.type:"unknown";
+        tileAt(vrow,vcol){
+          const idx = this.tileIndex(vrow,vcol);
+          return this.townData[idx];
         },
-        tileLabel(y,x){
-          const tile= this.tileAt(y,x);
-          return tile? tile.label:"???";
+        tileType(vrow,vcol){
+          const t = this.tileAt(vrow,vcol);
+          return t ? t.type : "unknown";
         },
-        isHeroTile(y,x){
-          return (this.heroX===x && this.heroY===y);
+        tileLabel(vrow,vcol){
+          const t = this.tileAt(vrow,vcol);
+          return t ? t.label : "???";
+        },
+        isHeroTile(vrow,vcol){
+          let wy = this.offsetY + vrow;
+          let wx = this.offsetX + vcol;
+          return (wx===this.heroX && wy===this.heroY);
         },
         showMessage(msg){
-          this.message=msg;
+          this.message = msg;
           setTimeout(()=>{ this.message=""; },2000);
         },
         move(dir){
-          let nx=this.heroX, ny=this.heroY;
+          let nx = this.heroX, ny = this.heroY;
           if(dir==="up") ny--;
           if(dir==="down") ny++;
           if(dir==="left") nx--;
-          if(dir==="right")nx++;
-          if(nx<0||nx>9||ny<0||ny>9){
-            // フィールドへ戻る
+          if(dir==="right") nx++;
+          // マップ外ならフィールドへ戻る
+          if(nx < 0 || nx >= this.worldWidth || ny < 0 || ny >= this.worldHeight){
             this.$emit("switch-scene","field",this.fieldEntrance);
             return;
           }
-          let tile= this.tileAt(ny,nx);
+          let tile = this.townData.find(t => t.x===nx && t.y===ny);
+          if(tile && tile.type==="exit"){
+            this.$emit("switch-scene","field",this.fieldEntrance);
+            return;
+          }
           if(tile && tile.type==="building"){
             this.showMessage(tile.label+"に入る");
             this.openShop(tile.label);
             return;
           }
-          this.heroX=nx; this.heroY=ny;
+          this.heroX = nx;
+          this.heroY = ny;
           if(tile && tile.type==="npc"){
             this.showMessage("「こんにちは、旅の人！」");
           }
         },
         openShop(lbl){
-          this.shopOpen=true;
+          this.shopOpen = true;
           if(lbl==="宿屋"){
-            this.currentShopName="宿屋 (20G)";
-            this.shopItems=[{name:"宿泊",price:20,effect:"heal",type:"consumable"}];
+            this.currentShopName = "宿屋 (20G)";
+            this.shopItems = [{name:"宿泊", price:20, effect:"heal", type:"consumable"}];
           }
           else if(lbl==="武器屋"){
-            this.currentShopName="武器屋";
-            this.shopItems=[
+            this.currentShopName = "武器屋";
+            this.shopItems = [
               {name:"こんぼう", price:50, type:"weapon", power:2},
               {name:"どうのつるぎ", price:180, type:"weapon", power:8},
               {name:"はがねのつるぎ", price:1500, type:"weapon", power:20}
             ];
           }
           else if(lbl==="防具屋"){
-            this.currentShopName="防具屋";
-            this.shopItems=[
+            this.currentShopName = "防具屋";
+            this.shopItems = [
               {name:"ぬののふく", price:20, type:"armor", power:2},
               {name:"かわのよろい", price:70, type:"armor", power:4},
               {name:"くさりかたびら", price:300, type:"armor", power:10}
             ];
           }
           else if(lbl==="道具屋"){
-            this.currentShopName="道具屋";
-            this.shopItems=[
-              {name:"回復薬", price:10, type:"consumable",effect:"smallHeal"},
-              {name:"毒消し草", price:8, type:"consumable",effect:"curePoison"},
-              {name:"キメラのつばさ", price:25, type:"consumable",effect:"returnTown"}
+            this.currentShopName = "道具屋";
+            this.shopItems = [
+              {name:"回復薬", price:10, type:"consumable", effect:"smallHeal"},
+              {name:"毒消し草", price:8, type:"consumable", effect:"curePoison"},
+              {name:"キメラのつばさ", price:25, type:"consumable", effect:"returnTown"}
             ];
           }
         },
         closeShop(){
-          this.shopOpen=false;
+          this.shopOpen = false;
         },
         buyItem(item){
           this.$emit("update-status",{ type:"buy", item });
@@ -645,7 +678,6 @@
               <p v-for="(line, index) in battleMessageLines" :key="index">{{ line }}</p>
             </div>
             <div class="actions">
-              <!-- デフォルトで攻撃ボタンをアクティブにする: id="attack-button", mounted後 focus -->
               <button id="attack-button" @touchstart.prevent="physicalAttack" @mousedown.prevent="physicalAttack"
                       class="bg-blue-500 rounded">攻撃</button>
               <button v-if="heroSpells.length>0" @touchstart.prevent="openSpellMenu" @mousedown.prevent="openSpellMenu" class="bg-indigo-500 rounded">魔法</button>
@@ -653,7 +685,6 @@
               <button @touchstart.prevent="openItemMenu" @mousedown.prevent="openItemMenu" class="bg-green-500 rounded">道具</button>
             </div>
           </div>
-          <!-- spell-window -->
           <div v-if="spellMenuOpen" class="spell-window">
             <h3 class="mb-2">呪文選択 (MP: {{ heroStatus.mp }})</h3>
             <div v-for="sp in heroSpells" :key="sp.name"
@@ -663,7 +694,6 @@
             </div>
             <button @touchstart.prevent="spellMenuOpen=false" @mousedown.prevent="spellMenuOpen=false" class="bg-red-500 rounded px-2 py-1">やめる</button>
           </div>
-          <!-- item-window -->
           <div v-if="itemMenuOpen" class="item-window">
             <h3 class="mb-2">アイテム選択</h3>
             <div v-for="(it,idx) in heroStatus.inventory" :key="idx"
@@ -678,7 +708,8 @@
       data(){
         return {
           heroHP: this.initialHeroHP,
-          heroMaxHP: this.initialHeroHP,
+          // 最大HPは常に最新の heroStatus.maxHp から取得
+          heroMaxHP: this.heroStatus.maxHp,
           enemyHP: this.enemy.hp,
           enemyMaxHP: this.enemy.maxHp,
           spellMenuOpen: false,
@@ -728,7 +759,7 @@
             this.appendMsg(`${sp.name}！ ${this.enemy.name}に${dmg}ダメージ。`);
           }
           else if(sp.type==="heal"){
-            let recov=sp.power;
+            let recov= sp.power;
             this.heroHP= Math.min(this.heroHP+ recov, this.heroMaxHP);
             this.appendMsg(`${sp.name}！ HPが${recov}回復。`);
           }
@@ -766,14 +797,10 @@
           if(this.enemyHP<=0){
             this.enemyHP=0;
             this.appendMsg(`${this.enemy.name}を倒した！`);
-            // ブラウザアラートではなく、独自モーダルで表示する
             setTimeout(()=>{
-              // 敵を倒した後のメッセージをモーダル表示
               const defeatMsg= `${this.enemy.name}を倒した！\nG:${this.enemy.reward.gold},EXP:${this.enemy.reward.exp}`;
               this.$emit("update-status",{ type:"reward", reward:this.enemy.reward });
-              // モーダルに表示するためにカスタムイベントでアプリに通知
               this.$emit("show-modal-message", { content: defeatMsg });
-              // シーンをフィールドへ戻す
               this.$emit("switch-scene","field");
             },1500);
           } else {
@@ -786,16 +813,15 @@
             dmg= Math.max(0,this.enemy.magicAttack);
             this.appendMsg(`${this.enemy.name}の魔法攻撃！ 勇者に${dmg}ダメージ。`);
           } else {
-            dmg= Math.max(0,this.enemy.attack-(this.calcFinalDefense(this.heroStatus)/2));
+            dmg= Math.max(0,this.enemy.attack - (this.calcFinalDefense(this.heroStatus)/2));
             this.appendMsg(`${this.enemy.name}の攻撃！ 勇者に${dmg}ダメージ。`);
           }
           this.heroHP-= dmg;
-          this.heroStatus.hp= this.heroHP;
+          this.heroStatus.hp = this.heroHP;
           if(this.heroHP<=0){
             this.heroHP=0;
             this.appendMsg("勇者は倒れた……");
             setTimeout(()=>{
-              // GAME OVER
               this.$emit("update-status", { type:"setHP", amount:this.heroMaxHP });
               this.$emit("switch-scene","field");
             },1500);
@@ -804,19 +830,30 @@
         appendMsg(line){
           console.log("appendMsg:", line);
           this.messageHistory.push(line);
+        },
+        handleBattleEnter(e){
+          if(e.key==='Enter'){
+            this.physicalAttack();
+          }
         }
       },
       mounted(){
-        // 攻撃ボタンをデフォルトでフォーカス
         this.$nextTick(()=>{
           const atkBtn= document.getElementById("attack-button");
           if(atkBtn) atkBtn.focus();
         });
+        window.addEventListener('keydown', this.handleBattleEnter);
+      },
+      unmounted(){
+        window.removeEventListener('keydown', this.handleBattleEnter);
       }
     };
 
     /******************************************
-     * App (ルート) - 敵を倒したメッセージもモーダルで表示
+     * App (ルート)
+     * ・統一モーダル対応
+     * ・レベルアップ時に取得したプロフィール内容・習得魔法を通知
+     * ・スペースキー押下時はプロパティ表示（CheckProperty）を実施
      ******************************************/
     const App = {
       template:`
@@ -833,11 +870,11 @@
                      :current-enemy="currentEnemy"
                      :hero-status="status">
           </component>
-          <!-- モーダル (パラメータ or 倒した後のメッセージ) -->
+          <!-- 統一モーダル -->
           <div v-if="showPropertiesModal" class="modal-overlay">
             <div class="modal-content">
               <pre>{{ propertiesModalContent }}</pre>
-              <button @click="closePropertiesModal" class="modal-close">閉じる</button>
+              <button @click="closePropertiesModal" class="modal-ok bg-blue-500 rounded">OK</button>
             </div>
           </div>
         </div>
@@ -871,7 +908,6 @@
           } else if(this.currentScene==="town"){
             return TownMap;
           } else if(this.currentScene==="battle"){
-            // 戦闘シーン: render 関数で v-bind
             return {
               render:()=>{
                 return Vue.h(BattleScene,{
@@ -889,7 +925,7 @@
       methods:{
         switchScene(scene, payload){
           if(scene==="field"){
-            // 戦闘後: フィールド座標維持
+            // 戦闘後はフィールド座標を維持
           }
           else if(scene==="town"){
             if(payload && payload.x!=null && payload.y!=null){
@@ -911,8 +947,9 @@
               this.status.gold -= it.price;
               if(it.type==="consumable"){
                 if(it.effect==="heal"){
-                  this.status.hp= this.status.maxHp;
-                  this.status.mp= this.status.maxMp;
+                  // ヒールは現在のHP,MPを回復（最大値は変わらない）
+                  this.status.hp= Math.min(this.status.hp + 999, this.status.maxHp);
+                  this.status.mp= Math.min(this.status.mp + 999, this.status.maxMp);
                 }
                 this.status.inventory.push(it);
               }
@@ -924,23 +961,34 @@
               }
             }
             else{
-              alert("お金が足りません！");
+              this.showModalMessage({ content:"お金が足りません！" });
             }
           }
           else if(payload.type==="reward"){
             const r= payload.reward;
             this.status.gold += (r.gold||0);
             this.status.exp  += (r.exp||0);
-            // 敵を倒した報酬は alert() ではなく, ここではメッセージをモーダルで出すかどうか？
-            //  -> すでにバトルシーン -> show-modal-message で出している
             this.checkLevelUp();
           }
           else if(payload.type==="setHP"){
             this.status.hp= payload.amount;
           }
         },
+        getProfileDetails(){
+          const w = this.status.weapon ? this.status.weapon.name : "(なし)";
+          const a = this.status.armor ? this.status.armor.name : "(なし)";
+          const inv = this.status.inventory.length > 0 ? this.status.inventory.map(i => i.name).join(", ") : "(なし)";
+          return `【勇者ステータス】
+LV: ${this.status.level}
+EXP: ${this.status.exp} (次: ${this.status.nextExp||"?"})
+HP: ${this.status.hp}/${this.status.maxHp}
+MP: ${this.status.mp}/${this.status.maxMp}
+攻撃: ${this.calcFinalAttack(this.status)} (Base: ${this.status.attack}, 武器: ${w})
+守備: ${this.calcFinalDefense(this.status)} (Base: ${this.status.defense}, 防具: ${a})
+習得呪文: ${this.status.learnedSpells.join(", ")||"なし"}
+在庫: ${inv}`;
+        },
         showModalMessage(data){
-          // バトルシーンから "show-modal-message" イベントを受け取り、モーダルに表示
           this.propertiesModalContent= data.content || "メッセージ";
           this.showPropertiesModal= true;
         },
@@ -948,26 +996,37 @@
           this.showPropertiesModal= false;
         },
         checkLevelUp(){
-          const table= [10,30,60,100,200];
-          while(this.status.level< table.length+1 && this.status.exp>= table[this.status.level-1]){
+          const levelExpTable = [10, 30, 60, 100, 150, 210, 280, 360, 450];
+          let leveledUp = false;
+          let messages = [];
+          while(this.status.level < levelExpTable.length + 1 && this.status.exp >= levelExpTable[this.status.level - 1]){
             this.status.level++;
             this.gainLevelUpParams();
-            alert(`レベルが${this.status.level}になった！`);
+            leveledUp = true;
+            messages.push(`レベルが${this.status.level}になった！`);
+          }
+          if(this.status.level - 1 < levelExpTable.length){
+            this.status.nextExp = levelExpTable[this.status.level - 1];
+          } else {
+            this.status.nextExp = "-";
+          }
+          if(leveledUp){
+            const profileDetails = this.getProfileDetails();
+            const msg = messages.join("\n") + "\n" + profileDetails;
+            this.showModalMessage({ content: msg });
           }
         },
         gainLevelUpParams(){
-          this.status.maxHp +=5;
-          this.status.hp= this.status.maxHp;
-          this.status.maxMp +=3;
-          this.status.mp= this.status.maxMp;
-          this.status.attack +=2;
-          this.status.defense +=1;
+          // 最大値は上がるが、現在のHP,MPはそのまま（戦闘中のダメージ状態を維持）
+          this.status.maxHp += 5;
+          this.status.maxMp += 3;
+          this.status.attack += 2;
+          this.status.defense += 1;
+          // 呪文習得（例：レベル2でホイミ、レベル3でベギラマ）
           if(this.status.level===2 && !this.status.learnedSpells.includes("ホイミ")){
             this.status.learnedSpells.push("ホイミ");
-            alert("ホイミを覚えた！");
           } else if(this.status.level===3 && !this.status.learnedSpells.includes("ベギラマ")){
             this.status.learnedSpells.push("ベギラマ");
-            alert("ベギラマを覚えた！");
           }
         },
         calcFinalAttack(hero){
@@ -987,8 +1046,8 @@ LV: ${this.status.level}
 EXP: ${this.status.exp} (次:${this.status.nextExp||"?"})
 HP: ${this.status.hp}/${this.status.maxHp}
 MP: ${this.status.mp}/${this.status.maxMp}
-攻撃: ${this.calcFinalAttack(this.status)} (Base:${this.status.attack},武器:${w})
-守備: ${this.calcFinalDefense(this.status)} (Base:${this.status.defense},防具:${a})
+攻撃: ${this.calcFinalAttack(this.status)} (Base:${this.status.attack}, 武器:${w})
+守備: ${this.calcFinalDefense(this.status)} (Base:${this.status.defense}, 防具:${a})
 速度: ${this.status.speed}
 所持金: ${this.status.gold}G
 習得呪文: ${this.status.learnedSpells.join(", ")||"なし"}
@@ -999,7 +1058,26 @@ MP: ${this.status.mp}/${this.status.maxMp}
         updateFieldPosition(pos){
           this.fieldPosition.x= pos.x;
           this.fieldPosition.y= pos.y;
+        },
+        modalKeyHandler(e){
+          if(this.showPropertiesModal && e.key==='Enter'){
+            this.closePropertiesModal();
+          }
+        },
+        spaceKeyHandler(e){
+          // スペースキー押下時はプロパティ表示を実施
+          if(e.key === " "){
+            this.checkProperties();
+          }
         }
+      },
+      mounted(){
+        window.addEventListener('keydown', this.modalKeyHandler.bind(this));
+        window.addEventListener('keydown', this.spaceKeyHandler.bind(this));
+      },
+      unmounted(){
+        window.removeEventListener('keydown', this.modalKeyHandler.bind(this));
+        window.removeEventListener('keydown', this.spaceKeyHandler.bind(this));
       }
     };
 
