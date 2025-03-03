@@ -342,23 +342,24 @@ const FieldMap = {
         <div v-if="message" class="message-window">{{message}}</div>
       </div>
       <div class="control-panel">
+        <!-- 上段 -->
         <div class="control-row">
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('up')" @mousedown.prevent="move('up')">↑</button>
         </div>
+        <!-- 中段 (左/プロパティ/右) -->
         <div class="control-row">
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('left')" @mousedown.prevent="move('left')">←</button>
+          <button class="control-btn bg-purple-500 rounded-full"
+                  @touchstart.prevent="emitPropertyCheck" @mousedown.prevent="emitPropertyCheck">Ｐ</button>
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('right')" @mousedown.prevent="move('right')">→</button>
         </div>
+        <!-- 下段 -->
         <div class="control-row">
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('down')" @mousedown.prevent="move('down')">↓</button>
-        </div>
-        <div class="control-row">
-          <button class="control-btn bg-purple-500 rounded-full"
-                  @touchstart.prevent="emitPropertyCheck" @mousedown.prevent="emitPropertyCheck">Ｐ</button>
         </div>
       </div>
     </div>
@@ -514,7 +515,7 @@ const FieldMap = {
 };
 
 /****************************************
- * TownMap(10x10可 or 20x20) - IndexedDB
+ * TownMap (DPad中央にプロパティ無いため修正済)
  ****************************************/
 const TownMap = {
   mixins:[KeyOperationMixin],
@@ -534,31 +535,30 @@ const TownMap = {
         <div v-if="message" class="message-window">{{message}}</div>
       </div>
       <div class="control-panel">
+        <!-- 上段 -->
         <div class="control-row">
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('up')" @mousedown.prevent="move('up')">↑</button>
         </div>
+        <!-- 中段 (左/プロパティ/右) -->
         <div class="control-row">
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('left')" @mousedown.prevent="move('left')">←</button>
+          <button class="control-btn bg-purple-500 rounded-full"
+                  @touchstart.prevent="emitPropertyCheck" @mousedown.prevent="emitPropertyCheck">Ｐ</button>
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('right')" @mousedown.prevent="move('right')">→</button>
         </div>
+        <!-- 下段 -->
         <div class="control-row">
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('down')" @mousedown.prevent="move('down')">↓</button>
-        </div>
-        <div class="control-row">
-          <button class="control-btn bg-purple-500 rounded-full"
-                  @touchstart.prevent="emitPropertyCheck" @mousedown.prevent="emitPropertyCheck">Ｐ</button>
         </div>
       </div>
     </div>
   `,
   data(){
     return {
-      worldW:10,
-      worldH:10,
       heroX:5, heroY:5,
       message:'',
       townData:[]
@@ -574,7 +574,6 @@ const TownMap = {
   },
   methods:{
     initTown(){
-      // 10x10 (サンプルで固定)
       let arr=[];
       for(let y=0;y<10;y++){
         for(let x=0;x<10;x++){
@@ -596,12 +595,12 @@ const TownMap = {
       return (r*10 + c);
     },
     tileAt(r,c){
-      let idx= this.tileIndex(r,c);
+      const idx= this.tileIndex(r,c);
       return this.townData[idx];
     },
     tileType(r,c){
       const t= this.tileAt(r,c);
-      return t? t.type:'?';
+      return t? t.type:'unknown';
     },
     tileLabel(r,c){
       const t= this.tileAt(r,c);
@@ -621,7 +620,7 @@ const TownMap = {
       if(dir==='down') ny++;
       if(dir==='left') nx--;
       if(dir==='right')nx++;
-      if(nx<0||nx>=10|| ny<0|| ny>=10){
+      if(nx<0||nx>=10|| ny<0||ny>=10){
         // フィールドに戻る
         this.$emit('switch-scene','field', this.fieldEntrance);
         return;
@@ -675,7 +674,7 @@ const TownMap = {
           ${it.name} (${it.price}G)
         </button>`;
       });
-      // 道具屋の場合:売却(半額)
+      // 道具屋:売却
       if(label==='道具屋' && this.heroStatus.inventory.length>0){
         html+= `<hr><p style="font-size:12px;">売却(半額):</p>`;
         this.heroStatus.inventory.forEach((invItem,idx)=>{
@@ -719,12 +718,16 @@ const TownMap = {
     },
     onTileTouch(tile){
       if(tile && tile.type==='npc'){
-        this.showMessage('「こんにちは！」');
+        this.showMessage('「こんにちは、旅の人！」');
       }
       else if(tile && tile.type==='building'){
         this.showMessage(tile.label+'に入る');
         this.openShop(tile.label);
       }
+    },
+    showMessage(msg){
+      this.message= msg;
+      setTimeout(()=>{ this.message='';},2000);
     },
     emitPropertyCheck(){
       this.$emit('check-properties');
@@ -799,12 +802,11 @@ const BattleScene = {
     },
     containerStyle(){
       if(this.heroStatus && this.heroStatus.maxHp){
-        return { border: (this.heroStatus.hp/ this.heroStatus.maxHp<=0.25 ? '4px solid red' : '4px solid #fff')};
+        return { border: (this.heroStatus.hp/ this.heroStatus.maxHp<=0.25 ? '4px solid red':'4px solid #fff')};
       }
       return { border:'4px solid #fff'};
     },
     heroSpells(){
-      // 例として「ギラ」「ホイミ」など
       let spells=[];
       if(this.heroStatus.learnedSpells.includes('ギラ')){
         spells.push({ name:'ギラ', mpCost:3, type:'attack', power:7 });
@@ -1097,11 +1099,8 @@ const RootApp = {
         this.heroStatus.level++;
         const inc= { hp:5, mp:3, attack:2, defense:1 };
         this.heroStatus.maxHp += inc.hp;
-        // 仕様でレベルアップ時にHPを回復しないなら以下行は削除してください
+        // レベルアップ時にHP/MP回復しない場合、下2行を削除
         // this.heroStatus.hp= this.heroStatus.maxHp;
-
-        this.heroStatus.maxMp += inc.mp;
-        // 同様にMP全回復しないなら↓行は削除
         // this.heroStatus.mp= this.heroStatus.maxMp;
 
         this.heroStatus.attack += inc.attack;
@@ -1135,7 +1134,10 @@ const RootApp = {
       const a= this.heroStatus.armor? this.heroStatus.armor.name:'(なし)';
       const inv= (this.heroStatus.inventory.length>0)?
                  this.heroStatus.inventory.map(i=> i.name).join(', '): '(なし)';
-      let html= `<pre>
+
+      // リセットボタンを小さく端に表示
+      let html= `<div style="position:relative;">
+<pre>
 【勇者ステータス】
 LV: ${this.heroStatus.level}
 EXP: ${this.heroStatus.exp} (次: ${this.heroStatus.nextExp||"?"})
@@ -1145,14 +1147,31 @@ MP: ${this.heroStatus.mp}/${this.heroStatus.maxMp}
 守: ${this.calcFinalDefense(this.heroStatus)}
 Gold: ${this.heroStatus.gold}
 呪文: ${this.heroStatus.learnedSpells.join(", ")||"なし"}
-</pre>`;
+所持品: ${inv}
+</pre>
+<button id="resetGame" 
+  style="
+    position:absolute; 
+    top:5px; right:5px; 
+    font-size: 9px; 
+    background:#900; 
+    color:#fff; 
+    border:none; 
+    border-radius:4px; 
+    padding:2px 4px;
+    cursor:pointer;
+  ">
+リセット
+</button>
+</div>`;
+
+      // 装備や道具使用などは、この下にさらに続ける
       html+= `<div class="modal-section">
 <h3 style="font-size:14px;">装備</h3>
 <p>武器: ${w}</p>
 <p>防具: ${a}</p>
 </div>`;
 
-      // 装備変更在庫
       const equippable= this.heroStatus.inventory.filter(it=> it.type==='weapon' || it.type==='armor');
       if(equippable.length>0){
         html+= `<div class="modal-section">
@@ -1164,7 +1183,6 @@ Gold: ${this.heroStatus.gold}
         });
         html+= `</div>`;
       }
-      // 道具使用
       const consumables= this.heroStatus.inventory.filter(it=> it.type==='consumable');
       if(consumables.length>0){
         html+= `<div class="modal-section">
@@ -1194,19 +1212,23 @@ Gold: ${this.heroStatus.gold}
           html+= `</div>`;
         }
       }
-      // ゲームリセット
-      html+= `<div class="modal-section">
-<button id="resetGame" style="display:block;width:100%;margin:3px 0;padding:5px;background:#aa0000;color:#fff;font-size:12px;">
-ゲームリセット
-</button>
-</div>`;
       showModal({
         title:'勇者のステータス',
         html,
         showCancelButton:true,
         cancelButtonText:'閉じる'
       }).then(()=>{});
+
       setTimeout(()=>{
+        // リセットボタン (小さく端に表示)
+        const resetBtn= document.getElementById('resetGame');
+        if(resetBtn){
+          resetBtn.addEventListener('click',()=>{
+            resetGameData();
+            Swal.close();
+          });
+        }
+        // 装備変更
         equippable.forEach((it,idx)=>{
           const btn= document.getElementById(`equip-${idx}`);
           if(btn){
@@ -1216,6 +1238,7 @@ Gold: ${this.heroStatus.gold}
             });
           }
         });
+        // 消費アイテム使用
         consumables.forEach((it,idx)=>{
           const btn= document.getElementById(`use-${idx}`);
           if(btn){
@@ -1225,6 +1248,7 @@ Gold: ${this.heroStatus.gold}
             });
           }
         });
+        // 戦闘外で回復魔法など使用
         if(this.currentScene!=='battle'){
           const spells= this.heroStatus.learnedSpells.map(sp=>{
             if(sp==='ギラ') return { name:'ギラ', mpCost:3, type:'attack', power:7 };
@@ -1239,13 +1263,6 @@ Gold: ${this.heroStatus.gold}
                 Swal.close();
               });
             }
-          });
-        }
-        const resetBtn= document.getElementById('resetGame');
-        if(resetBtn){
-          resetBtn.addEventListener('click',()=>{
-            resetGameData();
-            Swal.close();
           });
         }
       },200);
@@ -1287,7 +1304,6 @@ Gold: ${this.heroStatus.gold}
       if(idx>=0) this.heroStatus.inventory.splice(idx,1);
     },
     castSpellFromProperties(sp){
-      // 戦闘外で回復魔法等を使用可
       if(this.heroStatus.mp< sp.mpCost){
         showToast('MPが足りません！','error');
         return;
