@@ -56,6 +56,58 @@ const defaultGameData = {
     { name: "ベギラマ", mpCost: 5, type: "attack", power: 15 }
   ],
   levelUpCriteria: [10, 30, 60, 100, 150],
+
+  // ▼▼▼ 追加: 各種設定値をまとめるオブジェクト ▼▼▼
+  settings: {
+    // フィールドマップに関する設定値
+    fieldMap: {
+      width: 30,
+      height: 30,
+      viewportWidth: 10,
+      viewportHeight: 10,
+      // ランダム生成時の確率
+      randomTileProb: {
+        grass: 0.6,
+        road: 0.8,
+        forest: 0.9,
+        mountain: 0.95,
+        water: 1.0
+      },
+      // 固定タイルの配置(例: 町ゲートやNPC)
+      fixedTiles: [
+        { x: 0, y: 9, type: 'townGate', label: '町' },
+        { x: 5, y: 5, type: 'npc', label: 'NPC' }
+      ],
+      // 例: 草むらタイルでの敵エンカウント率 (0.1=10%)
+      encounterRate: 0.1
+    },
+    // 町マップに関する設定値
+    townMap: {
+      width: 10,
+      height: 10,
+      boundaryTile: 'exit',
+      // 町の建物やNPC配置のデフォルト
+      buildings: [
+        { x: 3, y: 3, type: 'building', label: '宿屋' },
+        { x: 5, y: 3, type: 'building', label: '武器屋' },
+        { x: 7, y: 3, type: 'building', label: '防具屋' },
+        { x: 3, y: 5, type: 'building', label: '道具屋' },
+        { x: 5, y: 5, type: 'npc', label: 'NPC' }
+      ]
+    },
+    // 勇者の初期ステータス
+    heroInitialStatus: {
+      level: 1, exp: 0, nextExp: 10,
+      hp: 15, maxHp: 15,
+      mp: 5, maxMp: 5,
+      attack: 5, defense: 3, speed: 10,
+      gold: 1000,
+      weapon: null, armor: null,
+      learnedSpells: ['ホイミ'],
+      inventory: []
+    }
+  },
+
   // フィールド/町データの器(拡張可)
   fields: [
     {
