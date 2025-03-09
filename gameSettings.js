@@ -28,6 +28,7 @@ function initDB() {
 // defaultGameData に fields と townMap の器を含める
 const defaultGameData = {
   id: 'default',
+
   enemyData: [
     { id: "enemy001", name: "スライム", hp: 10, attack: 2, defense: 1, magicAttack: 0, magicDefense: 0,
       reward: { gold: 30, exp: 10, item: null } },
@@ -36,6 +37,7 @@ const defaultGameData = {
     { id: "enemy003", name: "キメラ", hp: 20, attack: 5, defense: 2, magicAttack: 4, magicDefense: 2,
       reward: { gold: 80, exp: 20, item: "羽" } }
   ],
+
   itemData: {
     consumables: [
       { id: "item001", name: "回復薬", price: 10, effect: "smallHeal", type: "consumable" },
@@ -50,14 +52,80 @@ const defaultGameData = {
       { id: "item006", name: "かわのよろい", price: 70, power: 4, type: "armor" }
     ]
   },
+
+  /****************************************
+   * DQ1で使用される魔法をすべて定義
+   ****************************************/
   magicData: [
-    { name: "ホイミ", mpCost: 3, type: "heal", power: 12 },
-    { name: "ギラ", mpCost: 3, type: "attack", power: 7 },
-    { name: "ベギラマ", mpCost: 5, type: "attack", power: 15 }
+    {
+      name: "ホイミ", mpCost: 3,
+      type: "heal",
+      power: 20,  // 20～27だが簡易化。バトル中・フィールドともに使用可能
+      usableIn: "both"
+    },
+    {
+      name: "ギラ", mpCost: 2,
+      type: "attack",
+      power: 10, // 7～12ダメージを簡略化
+      usableIn: "battle"
+    },
+    {
+      name: "ベギラマ", mpCost: 5,
+      type: "attack",
+      power: 20, // 16～24ダメージを簡略化
+      usableIn: "battle"
+    },
+    {
+      name: "ラリホー", mpCost: 2,
+      type: "sleep", // 独自：敵を眠らせる
+      usableIn: "battle"
+    },
+    {
+      name: "マホトーン", mpCost: 2,
+      type: "silence", // 独自：敵の呪文を封じる
+      usableIn: "battle"
+    },
+    {
+      name: "レミーラ", mpCost: 2,
+      type: "light", // 独自：洞窟を明るくする
+      usableIn: "field"
+    },
+    {
+      name: "ルーラ", mpCost: 8,
+      type: "warp", // 独自：最後に訪れた城・町へワープ
+      usableIn: "field"
+    },
+    {
+      name: "トヘロス", mpCost: 6,
+      type: "repel", // 独自：弱い敵を寄せ付けない
+      usableIn: "field"
+    },
+    {
+      name: "リレミト", mpCost: 6,
+      type: "escape", // 独自：洞窟・塔などから脱出
+      usableIn: "field"
+    }
   ],
+
+  // レベルアップに必要な経験値（例）
   levelUpCriteria: [10, 30, 60, 100, 150],
 
-  // ▼▼▼ 追加: 各種設定値をまとめるオブジェクト ▼▼▼
+  /****************************************
+   * レベルごとに習得する魔法リスト (DQ1準拠)
+   ****************************************/
+  levelUpLearnableSpells: {
+    "3": ["ホイミ"],
+    "4": ["ギラ"],
+    "7": ["ラリホー"],
+    "10": ["レミーラ"],
+    "12": ["ルーラ"],
+    "13": ["マホトーン"],
+    "15": ["トヘロス"],
+    "17": ["リレミト"],
+    "19": ["ベギラマ"]
+  },
+
+  // ▼▼▼ 各種設定値をまとめるオブジェクト ▼▼▼
   settings: {
     // フィールドマップに関する設定値
     fieldMap: {
@@ -73,12 +141,12 @@ const defaultGameData = {
         mountain: 0.95,
         water: 1.0
       },
-      // 固定タイルの配置(例: 町ゲートやNPC)
+      // 固定タイル
       fixedTiles: [
         { x: 0, y: 9, type: 'townGate', label: '町' },
         { x: 5, y: 5, type: 'npc', label: 'NPC' }
       ],
-      // 例: 草むらタイルでの敵エンカウント率 (0.1=10%)
+      // 草むらタイルでの敵エンカウント率
       encounterRate: 0.1
     },
     // 町マップに関する設定値
@@ -86,7 +154,6 @@ const defaultGameData = {
       width: 10,
       height: 10,
       boundaryTile: 'exit',
-      // 町の建物やNPC配置のデフォルト
       buildings: [
         { x: 3, y: 3, type: 'building', label: '宿屋' },
         { x: 5, y: 3, type: 'building', label: '武器屋' },
@@ -103,16 +170,16 @@ const defaultGameData = {
       attack: 5, defense: 3, speed: 10,
       gold: 1000,
       weapon: null, armor: null,
-      learnedSpells: ['ホイミ'],
+      learnedSpells: [], // スタート時は呪文なし(例) → Lv3以降順次覚える
       inventory: []
     }
   },
 
-  // フィールド/町データの器(拡張可)
+  // フィールド/町データの器
   fields: [
     {
       id: "field001", name: "草原", type: "野外",
-      layout: [],  // 初回起動時に作る
+      layout: [],
       terrainProperties: {
         grass: { passable: true, encounterRate: 0.1 },
         forest: { passable: true, encounterRate: 0.3 },
@@ -127,11 +194,10 @@ const defaultGameData = {
       events: []
     }
   ],
-  // 町マップ（10×10）の器
   townMap: {
     id: "town001",
     name: "町",
-    layout: []  // 初回起動時に作る
+    layout: []
   }
 };
 
@@ -148,7 +214,6 @@ function loadGameData() {
       saveGameData(defaultGameData);
       console.log('デフォルトのゲームデータをIndexedDBに保存しました');
     }
-    // DB読み込み完了フラグをtrueに
     dbLoaded = true;
   };
 }
