@@ -67,10 +67,12 @@ const FieldMap = {
         <div v-if="message" class="message-window">{{message}}</div>
       </div>
       <div class="control-panel">
+        <!-- 上段 -->
         <div class="control-row">
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('up')" @mousedown.prevent="move('up')">↑</button>
         </div>
+        <!-- 中段 (左/プロパティ/右) -->
         <div class="control-row">
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('left')" @mousedown.prevent="move('left')">←</button>
@@ -79,6 +81,7 @@ const FieldMap = {
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('right')" @mousedown.prevent="move('right')">→</button>
         </div>
+        <!-- 下段 -->
         <div class="control-row">
           <button class="control-btn bg-blue-500 rounded-full"
                   @touchstart.prevent="move('down')" @mousedown.prevent="move('down')">↓</button>
@@ -186,11 +189,12 @@ const FieldMap = {
       setTimeout(() => { this.message = ''; }, 2000);
     },
     move(dir) {
-      // ポップアップ(宿屋など)表示中は移動しない(宿屋などで実装時にフラグを使う想定)
+      // 宿屋などのポップアップ表示中は移動させない
       if (this.$root.isPopupActive) return;
 
-      if (Swal.isVisible()) return; // レベルアップトーストは移動制御しない想定だが、SweetAlert2モーダル中はブロック
+      // レベルアップ時のトースト表示は移動制御しない(= isPopupActiveを使わない)
       if (this.isFrozen) return;
+
       let nx = this.heroX, ny = this.heroY;
       if (dir === 'up' && ny > 0) ny--;
       if (dir === 'down' && ny < this.worldH - 1) ny++;
@@ -199,7 +203,7 @@ const FieldMap = {
 
       const tile = this.mapData[ny * this.worldW + nx];
       if (!tile) return;
-      // 通行不可
+
       if (tile.type === 'mountain' || tile.type === 'water') {
         this.showMessage('そこは通れない！');
         return;
@@ -215,10 +219,8 @@ const FieldMap = {
 
       // エンカウント判定
       if (tile.type === 'grass') {
-        // トヘロス(弱い敵を寄せ付けない)フラグがあれば無視するなどの実装を想定
         if (this.$root.repelCount && this.$root.repelCount > 0) {
-          // 弱い敵は寄せ付けない → repelCountを減らす or そのままでも可
-          // console.log("トヘロス効果中。エンカウント抑制。");
+          // トヘロス効果中: エンカウント抑制
         } else {
           const encounterRate = defaultGameData.settings.fieldMap.encounterRate;
           if (Math.random() < encounterRate) {
@@ -382,9 +384,8 @@ const TownMap = {
       setTimeout(() => { this.message = ''; }, 2000);
     },
     move(dir) {
-      // ポップアップ表示中は移動禁止
+      // 宿屋などのポップアップ表示中は移動不可
       if (this.$root.isPopupActive) return;
-      if (Swal.isVisible()) return;
 
       let nx = this.heroX, ny = this.heroY;
       if (dir === 'up') ny--;
@@ -411,7 +412,7 @@ const TownMap = {
       }
     },
     openShop(label) {
-      // モーダル表示 → this.$root.isPopupActive = true
+      // ポップアップ表示開始 → 移動抑止
       this.$root.isPopupActive = true;
       let items = [];
       let shopName = label;
@@ -424,7 +425,7 @@ const TownMap = {
           cancelButtonText: '閉じる',
           confirmButtonText: '回復する'
         }).then(res => {
-          this.$root.isPopupActive = false;
+          this.$root.isPopupActive = false; // 閉じたので再び移動許可
           if (res.isConfirmed) {
             this.$emit("update-status", { type: "setHP", amount: this.heroStatus.maxHp });
             this.heroStatus.mp = this.heroStatus.maxMp;
@@ -449,7 +450,7 @@ const TownMap = {
           ${it.name} (${it.price}G)
         </button>`;
       });
-      // 売却
+      // 道具屋：売却
       if (label === '道具屋' && this.heroStatus.inventory.length > 0) {
         html += `<hr><p style="font-size:12px;">売却(半額):</p>`;
         this.heroStatus.inventory.forEach((invItem, idx) => {
@@ -466,7 +467,8 @@ const TownMap = {
         cancelButtonText: '閉じる',
         confirmButtonText: '何もしない'
       }).then(() => {
-        this.$root.isPopupActive = false; // モーダル閉じたら移動可能
+        // ポップアップ閉じた
+        this.$root.isPopupActive = false;
       });
       setTimeout(() => {
         items.forEach((it, i) => {
@@ -570,8 +572,8 @@ const BattleScene = {
       enemyMaxHP: this.enemy.maxHp,
       messageHistory: [],
       enemyImgError: false,
-      enemyAsleep: false, // ラリホーなどを受けたか
-      enemySilenced: false // マホトーンなどを受けたか
+      enemyAsleep: false,
+      enemySilenced: false
     }
   },
   computed: {
@@ -585,10 +587,9 @@ const BattleScene = {
       return { border: '4px solid #fff' };
     },
     heroSpells() {
-      // learnedSpellsに含まれる魔法名 → magicData検索
       return this.heroStatus.learnedSpells
         .map(spellName => defaultGameData.magicData.find(m => m.name === spellName))
-        .filter(m => m && m.usableIn !== "field"); // 戦闘中はbattle専用 or both
+        .filter(m => m && (m.usableIn === 'battle' || m.usableIn === 'both'));
     }
   },
   methods: {
@@ -619,7 +620,6 @@ const BattleScene = {
     enemyTurn() {
       if (this.enemyAsleep) {
         this.appendMsg(`${this.enemy.name}は眠っている…`);
-        // 1/2の確率で目覚めるなどの実装はここ
         if (Math.random() < 0.3) {
           this.enemyAsleep = false;
           this.appendMsg(`${this.enemy.name}は目を覚ました！`);
@@ -680,10 +680,8 @@ const BattleScene = {
         showToast('MPが足りません！', 'error');
         return;
       }
-      // MP消費
       this.heroStatus.mp -= sp.mpCost;
       this.appendMsg(`勇者は${sp.name}を唱えた！`);
-      // 効果判定
       if (sp.type === 'attack') {
         let dmg = Math.max(0, sp.power - (this.enemy.magicDefense || 0));
         this.enemyHP -= dmg;
@@ -797,9 +795,9 @@ const RootApp = {
       // 初期ステータスをsettingsからコピー
       heroStatus: JSON.parse(JSON.stringify(defaultGameData.settings.heroInitialStatus)),
       currentEnemy: null,
-      // フィールドでの弱い敵を寄せ付けない残り回数
+      // トヘロスで弱い敵を寄せ付けない残り回数
       repelCount: 0,
-      // 宿屋などのポップアップ（SweetAlert2）表示時に移動禁止
+      // 宿屋などポップアップ中のフラグ
       isPopupActive: false
     }
   },
@@ -823,7 +821,7 @@ const RootApp = {
   methods: {
     switchScene(scene, payload) {
       if (scene === 'field') {
-        // 戦闘後の座標を保持
+        // 戦闘後の座標維持
       } else if (scene === 'town') {
         if (payload) this.fieldPos = payload;
       } else if (scene === 'battle') {
@@ -888,14 +886,17 @@ const RootApp = {
       const table = defaultGameData.levelUpCriteria;
       let leveledUp = false;
       let messages = [];
+      // Lv1→2 のとき: table[0]=5
       while (this.heroStatus.level <= table.length && this.heroStatus.exp >= table[this.heroStatus.level - 1]) {
         this.heroStatus.level++;
         const inc = { hp: 5, mp: 3, attack: 2, defense: 1 };
         this.heroStatus.maxHp += inc.hp;
-        // this.heroStatus.hp = this.heroStatus.maxHp; // 自動回復させたくなければコメントアウト
+        // この2行を有効にするとレベルアップと同時にHP/MP全回復
+        // this.heroStatus.hp = this.heroStatus.maxHp;
         // this.heroStatus.mp = this.heroStatus.maxMp;
         this.heroStatus.attack += inc.attack;
         this.heroStatus.defense += inc.defense;
+
         messages.push(`レベル${this.heroStatus.level}に上がりました！ [HP+${inc.hp}, MP+${inc.mp}, 攻+${inc.attack}, 守+${inc.defense}]`);
 
         // レベルに応じて呪文を覚える
@@ -910,11 +911,13 @@ const RootApp = {
         leveledUp = true;
       }
       if (this.heroStatus.level <= table.length) {
+        // 例えば Lv5 -> table[4], etc
         this.heroStatus.nextExp = table[this.heroStatus.level - 1];
       } else {
         this.heroStatus.nextExp = '-';
       }
       if (leveledUp) {
+        // レベルアップ時はトーストを使う → 移動制御しない
         messages.forEach(m => showToast(m, 'info'));
       }
     },
@@ -931,7 +934,7 @@ const RootApp = {
       const a = this.heroStatus.armor ? this.heroStatus.armor.name : '(なし)';
       const inv = (this.heroStatus.inventory.length > 0) ?
         this.heroStatus.inventory.map(i => i.name).join(', ') : '(なし)';
-  
+
       let html = `<div style="position:relative;">
   <pre>
   【勇者ステータス】
@@ -950,7 +953,7 @@ const RootApp = {
   リセット
   </button>
   </div>`;
-  
+
       html += `<div class="modal-section">
   <h3 style="font-size:14px;">装備</h3>
   <p>武器: ${w}</p>
@@ -980,11 +983,11 @@ const RootApp = {
         html += `</div>`;
       }
       if (this.currentScene !== 'battle') {
-        // バトル外で使用可能な「heal」系（ホイミなど）や、フィールド専用魔法を含めて表示してもOK。
-        // ここでは例として「heal」タイプのみを表示。
+        // バトル外で使える魔法を表示
+        // 回復魔法(heal)かつ usableIn=== 'both' or 'field'
         const spells = this.heroStatus.learnedSpells
-          .map(spellName => defaultGameData.magicData.find(m => m.name === spellName))
-          .filter(m => m && m.type === 'heal' && m.usableIn !== 'battle');
+          .map(spName => defaultGameData.magicData.find(m => m.name === spName))
+          .filter(m => m && m.type === 'heal' && (m.usableIn === 'field' || m.usableIn === 'both'));
         if (spells.length > 0) {
           html += `<div class="modal-section">
   <h3 style="font-size:14px;">魔法使用(回復)</h3>`;
@@ -995,10 +998,10 @@ const RootApp = {
           });
           html += `</div>`;
         }
-        // フィールド専用魔法(レミーラ, ルーラ, トヘロス, リレミト)も同様に表示・実装できる
+        // フィールド専用魔法(ルーラ・リレミト etc.)
         const fieldSpells = this.heroStatus.learnedSpells
           .map(spName => defaultGameData.magicData.find(m => m.name === spName))
-          .filter(m => m && m.usableIn === 'field' && m.type !== 'heal');
+          .filter(m => m && m.usableIn === 'field');
         if (fieldSpells.length > 0) {
           html += `<div class="modal-section">
   <h3 style="font-size:14px;">魔法使用(フィールド)</h3>`;
@@ -1042,11 +1045,10 @@ const RootApp = {
             });
           }
         });
-        // バトル外で使える魔法のボタンイベント
         if (this.currentScene !== 'battle') {
           const spells = this.heroStatus.learnedSpells
             .map(spName => defaultGameData.magicData.find(m => m.name === spName))
-            .filter(m => m && m.type === 'heal' && m.usableIn !== 'battle');
+            .filter(m => m && m.type === 'heal' && (m.usableIn === 'field' || m.usableIn === 'both'));
           spells.forEach((sp, idx) => {
             const btn = document.getElementById(`spellprop-${idx}`);
             if (btn) {
@@ -1058,7 +1060,7 @@ const RootApp = {
           });
           const fieldSpells = this.heroStatus.learnedSpells
             .map(spName => defaultGameData.magicData.find(m => m.name === spName))
-            .filter(m => m && m.usableIn === 'field' && m.type !== 'heal');
+            .filter(m => m && m.usableIn === 'field');
           fieldSpells.forEach((sp, idx) => {
             const btn = document.getElementById(`fieldspell-${idx}`);
             if (btn) {
@@ -1107,8 +1109,6 @@ const RootApp = {
       const idx = this.heroStatus.inventory.findIndex(x => x.name === item.name);
       if (idx >= 0) this.heroStatus.inventory.splice(idx, 1);
     },
-
-    // バトル外の回復魔法など
     castSpellFromProperties(sp) {
       if (this.heroStatus.mp < sp.mpCost) {
         showToast('MPが足りません！', 'error');
@@ -1121,11 +1121,9 @@ const RootApp = {
         showToast(`${sp.name}でHPが${rec}回復しました`, 'success');
       }
       else {
-        showToast('これは回復魔法ではありません', 'info');
+        showToast(`${sp.name}は戦闘専用か、未実装の効果です`, 'info');
       }
     },
-
-    // レミーラ、ルーラ、トヘロス、リレミト などフィールド専用魔法の処理
     castFieldSpell(sp) {
       if (this.heroStatus.mp < sp.mpCost) {
         showToast('MPが足りません！', 'error');
@@ -1133,28 +1131,22 @@ const RootApp = {
       }
       this.heroStatus.mp -= sp.mpCost;
       if (sp.type === 'light') {
-        // レミーラ
-        console.log("洞窟が明るくなった！(デモ)");
-        showToast("洞窟が明るくなった！", 'info');
+        showToast("レミーラ：洞窟を明るくする（デモ）", 'info');
       }
       else if (sp.type === 'warp') {
-        // ルーラ → 町へ飛ぶデモ
-        showToast("ルーラ発動！町へ移動します", 'info');
+        showToast("ルーラ発動：町へワープ（デモ）", 'info');
         setTimeout(() => { this.switchScene('town', { x:3, y:3 }); }, 1200);
       }
       else if (sp.type === 'repel') {
-        // トヘロス
-        showToast("トヘロス発動！弱い敵を寄せ付けない", 'info');
-        // 一定回数or一定時間、エンカウント率を0にするなど
-        this.repelCount = 10; 
+        showToast("トヘロス発動：弱い敵を寄せ付けない（デモ）", 'info');
+        this.repelCount = 10;
       }
       else if (sp.type === 'escape') {
-        // リレミト
-        showToast("リレミト発動！ダンジョンから脱出します", 'info');
+        showToast("リレミト発動：ダンジョン脱出（デモ）", 'info');
         setTimeout(() => { this.switchScene('field', { x:this.fieldPos.x, y:this.fieldPos.y }); }, 1200);
       }
       else {
-        showToast(`${sp.name}を唱えたが効果がなかった`, 'info');
+        showToast("何も起こらなかった…", 'info');
       }
     }
   },

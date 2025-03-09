@@ -60,58 +60,72 @@ const defaultGameData = {
     {
       name: "ホイミ", mpCost: 3,
       type: "heal",
-      power: 20,  // 20～27だが簡易化。バトル中・フィールドともに使用可能
+      power: 20,
       usableIn: "both"
     },
     {
       name: "ギラ", mpCost: 2,
       type: "attack",
-      power: 10, // 7～12ダメージを簡略化
+      power: 10,
       usableIn: "battle"
     },
     {
       name: "ベギラマ", mpCost: 5,
       type: "attack",
-      power: 20, // 16～24ダメージを簡略化
+      power: 20,
       usableIn: "battle"
     },
     {
       name: "ラリホー", mpCost: 2,
-      type: "sleep", // 独自：敵を眠らせる
+      type: "sleep",
       usableIn: "battle"
     },
     {
       name: "マホトーン", mpCost: 2,
-      type: "silence", // 独自：敵の呪文を封じる
+      type: "silence",
       usableIn: "battle"
     },
     {
       name: "レミーラ", mpCost: 2,
-      type: "light", // 独自：洞窟を明るくする
+      type: "light",
       usableIn: "field"
     },
     {
       name: "ルーラ", mpCost: 8,
-      type: "warp", // 独自：最後に訪れた城・町へワープ
+      type: "warp",
       usableIn: "field"
     },
     {
       name: "トヘロス", mpCost: 6,
-      type: "repel", // 独自：弱い敵を寄せ付けない
+      type: "repel",
       usableIn: "field"
     },
     {
       name: "リレミト", mpCost: 6,
-      type: "escape", // 独自：洞窟・塔などから脱出
+      type: "escape",
       usableIn: "field"
     }
   ],
 
-  // レベルアップに必要な経験値（例）
-  levelUpCriteria: [10, 30, 60, 100, 150],
+  /****************************************
+   * 非常に早くレベルが上がるように、Lv50まで設定
+   * Lv2→必要exp=5, Lv3→10, Lv4→15 ... Lv50→(50*5)=250
+   ****************************************/
+  levelUpCriteria: [
+    5,   10,  15,  20,  25,
+    30,  35,  40,  45,  50,
+    55,  60,  65,  70,  75,
+    80,  85,  90,  95,  100,
+    105, 110, 115, 120, 125,
+    130, 135, 140, 145, 150,
+    155, 160, 165, 170, 175,
+    180, 185, 190, 195, 200,
+    205, 210, 215, 220, 225,
+    230, 235, 240, 245, 250
+  ],
 
   /****************************************
-   * レベルごとに習得する魔法リスト (DQ1準拠)
+   * レベルごとに習得する魔法 (DQ1準拠)
    ****************************************/
   levelUpLearnableSpells: {
     "3": ["ホイミ"],
@@ -125,15 +139,14 @@ const defaultGameData = {
     "19": ["ベギラマ"]
   },
 
-  // ▼▼▼ 各種設定値をまとめるオブジェクト ▼▼▼
+  // ▼▼▼ 各種設定値をまとめる ▼▼▼
   settings: {
-    // フィールドマップに関する設定値
+    // フィールドマップ
     fieldMap: {
       width: 30,
       height: 30,
       viewportWidth: 10,
       viewportHeight: 10,
-      // ランダム生成時の確率
       randomTileProb: {
         grass: 0.6,
         road: 0.8,
@@ -141,15 +154,13 @@ const defaultGameData = {
         mountain: 0.95,
         water: 1.0
       },
-      // 固定タイル
       fixedTiles: [
         { x: 0, y: 9, type: 'townGate', label: '町' },
         { x: 5, y: 5, type: 'npc', label: 'NPC' }
       ],
-      // 草むらタイルでの敵エンカウント率
       encounterRate: 0.1
     },
-    // 町マップに関する設定値
+    // 町マップ
     townMap: {
       width: 10,
       height: 10,
@@ -164,13 +175,13 @@ const defaultGameData = {
     },
     // 勇者の初期ステータス
     heroInitialStatus: {
-      level: 1, exp: 0, nextExp: 10,
+      level: 1, exp: 0, nextExp: 5, // 初回は5でLv2になる
       hp: 15, maxHp: 15,
       mp: 5, maxMp: 5,
       attack: 5, defense: 3, speed: 10,
       gold: 1000,
       weapon: null, armor: null,
-      learnedSpells: [], // スタート時は呪文なし(例) → Lv3以降順次覚える
+      learnedSpells: [],
       inventory: []
     }
   },
